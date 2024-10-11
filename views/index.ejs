@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Donation Approval</title>
+</head>
+<body>
+    <h1>Donation Approval Page</h1>
+
+    <% if (donations.length === 0) { %>
+        <p>No donations available for approval.</p>
+    <% } else { %>
+    <table border="1">
+        <tr>
+            <th>Name</th>
+            <th>Amount</th>
+            <th>Message</th>
+            <th>Avatar</th>
+            <th>Timestamp</th>
+            <th>Actions</th>
+        </tr>
+        <% donations.forEach(donation => { %>
+        <tr>
+            <td><%= donation.name %></td>
+            <td>$<%= donation.amount %></td>
+            <td><%= donation.message %></td>
+            <td><img src="<%= donation.avatar %>" alt="avatar" width="50"></td>
+            <td><%= donation.timestamp || 'Not approved yet' %></td>
+            <td>
+                <% if (!donation.shown) { %>
+                <form method="POST" action="/approve" style="display:inline;">
+                    <input type="hidden" name="donationId" value="<%= donation.id %>">
+                    <button type="submit">Approve</button>
+                </form>
+                <form method="POST" action="/deny" style="display:inline;">
+                    <input type="hidden" name="donationId" value="<%= donation.id %>">
+                    <button type="submit">Deny</button>
+                </form>
+                <form method="POST" action="/markAsShown" style="display:inline;">
+                    <input type="hidden" name="donationId" value="<%= donation.id %>">
+                    <button type="submit">Mark as Shown</button>
+                </form>
+                <% } else { %>
+                <strong>Already Shown</strong>
+                <% } %>
+            </td>
+        </tr>
+        <% }); %>
+    </table>
+    <% } %>
+</body>
+</html>
