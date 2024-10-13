@@ -1,1 +1,1 @@
-# extra-life-vmix-connector
+# extra-life-gfx-connector

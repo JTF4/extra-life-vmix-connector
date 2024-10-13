@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title><%= title %></title>
+    <!-- Include Bootstrap for styling -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">Donation Approval</a>
+            <div class="collapse navbar-collapse">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/test">Test Page</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/settings">Settings</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <h1 class="my-4">Test Control Page</h1>
+
+        <div class="mb-3">
+            <button id="add-donation-btn" class="btn btn-primary">Add Test Donation</button>
+            <button id="cleanup-btn" class="btn btn-danger">Cleanup Test Donations</button>
+        </div>
+
+        <div id="status-message" class="alert alert-info d-none" role="alert"></div>
+    </div>
+
+    <!-- Include Bootstrap and Axios for AJAX requests -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Handle adding a test donation
+        document.getElementById('add-donation-btn').addEventListener('click', () => {
+            axios.post('/test/insertDonation')
+                .then(response => {
+                    showStatusMessage('Test donation added successfully!', 'success');
+                })
+                .catch(error => {
+                    showStatusMessage('Error adding test donation: ' + error.response.data.error, 'danger');
+                });
+        });
+
+        // Handle cleaning up test donations
+        document.getElementById('cleanup-btn').addEventListener('click', () => {
+            axios.post('/test/cleanup')
+                .then(response => {
+                    showStatusMessage('Test donations cleaned up successfully!', 'success');
+                })
+                .catch(error => {
+                    showStatusMessage('Error cleaning up donations: ' + error.response.data.error, 'danger');
+                });
+        });
+
+        // Function to show status messages
+        function showStatusMessage(message, type) {
+            const statusMessage = document.getElementById('status-message');
+            statusMessage.textContent = message;
+            statusMessage.className = 'alert alert-' + type;
+            statusMessage.classList.remove('d-none');
+        }
+    </script>
+</body>
+</html>

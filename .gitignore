@@ -1,3 +1,7 @@
 donations.db
+config.json
+.DS_Store
+yarn.lock
 
 node_modules/
+exports/

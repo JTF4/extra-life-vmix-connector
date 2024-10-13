@@ -5,6 +5,8 @@
     "express": "^4.21.1",
     "extra-life-api": "^8.0.0",
     "fs": "^0.0.1-security",
-    "sqlite3": "^5.1.7"
+    "node-vmix": "^1.7.1",
+    "sqlite3": "^5.1.7",
+    "xlsx": "^0.18.5"
   }
 }

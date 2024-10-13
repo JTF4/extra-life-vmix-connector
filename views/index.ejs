@@ -1,51 +1,131 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Donation Approval</title>
+    <!-- Include Bootstrap for styling -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
 </head>
 <body>
-    <h1>Donation Approval Page</h1>
+    <nav class="navbar navbar-expand-lg navbar-light bg-light">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">Donation Approval</a>
+            <div class="collapse navbar-collapse">
+                <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                    <li class="nav-item">
+                        <a class="nav-link active" href="/">Home</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/test">Test Page</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/settings">Settings</a>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="container">
+        <h1 class="my-4">Donation Approval Page</h1>
 
-    <% if (donations.length === 0) { %>
-        <p>No donations available for approval.</p>
-    <% } else { %>
-    <table border="1">
-        <tr>
-            <th>Name</th>
-            <th>Amount</th>
-            <th>Message</th>
-            <th>Avatar</th>
-            <th>Timestamp</th>
-            <th>Actions</th>
-        </tr>
-        <% donations.forEach(donation => { %>
-        <tr>
-            <td><%= donation.name %></td>
-            <td>$<%= donation.amount %></td>
-            <td><%= donation.message %></td>
-            <td><img src="<%= donation.avatar %>" alt="avatar" width="50"></td>
-            <td><%= donation.timestamp || 'Not approved yet' %></td>
-            <td>
-                <% if (!donation.shown) { %>
-                <form method="POST" action="/approve" style="display:inline;">
-                    <input type="hidden" name="donationId" value="<%= donation.id %>">
-                    <button type="submit">Approve</button>
-                </form>
-                <form method="POST" action="/deny" style="display:inline;">
-                    <input type="hidden" name="donationId" value="<%= donation.id %>">
-                    <button type="submit">Deny</button>
-                </form>
-                <form method="POST" action="/markAsShown" style="display:inline;">
-                    <input type="hidden" name="donationId" value="<%= donation.id %>">
-                    <button type="submit">Mark as Shown</button>
-                </form>
-                <% } else { %>
-                <strong>Already Shown</strong>
-                <% } %>
-            </td>
-        </tr>
-        <% }); %>
-    </table>
-    <% } %>
+        <div id="donation-list">
+            <table class="table table-striped">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Name</th>
+                        <th>Recipient</th>
+                        <th>Amount</th>
+                        <th>Message</th>
+                        <th>Avatar</th>
+                        <th>Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="donation-body">
+                    <% donations.forEach(donation => { %>
+                    <tr id="donation-<%= donation.id %>">
+                        <td><%= donation.id %></td>
+                        <td><%= donation.name %></td>
+                        <td><%= donation.recipient || 'No recipient' %></td>
+                        <td>$<%= donation.amount %></td>
+                        <td><%= donation.message || 'No message' %></td>
+                        <td><img src="<%= donation.avatar %>" alt="avatar" width="50"></td>
+                        <td>
+                            <button class="btn btn-success" onclick="handleAction('approve', '<%= donation.id %>')">Approve</button>
+                            <button class="btn btn-danger" onclick="handleAction('deny', '<%= donation.id %>')">Deny</button>
+                            <% if (donation.approved) { %>
+                            <button class="btn btn-warning" onclick="handleAction('markAsShown', '<%= donation.id %>')">Mark as Shown</button>
+                            <% } %>
+                        </td>
+                    </tr>
+                    <% }); %>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Include Bootstrap and Axios for AJAX requests -->
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // Function to handle approve, deny, and markAsShown actions via AJAX
+        function handleAction(action, donationId) {
+        axios.post('/' + action, {
+            donationId: donationId // Ensure donation ID is passed in the request body
+        })
+        .then(response => {
+            // Remove the donation from the list if successful
+            console.log(action + ' successful for donation ID:', donationId);
+            document.getElementById('donation-' + donationId).remove();
+        })
+        .catch(error => {
+            console.error('Error with ' + action + ' for donation ID:', donationId, error);
+        });
+        }
+
+        // Poll the server for new donations every 5 seconds
+            // Poll the server for new donations every 5 seconds
+        function fetchNewDonations() {
+            console.log("Polling for new donations...");
+            axios.get('/api/getNewDonations')
+                .then(response => {
+                    console.log("Response received:", response.data);  // Log the response
+                    const newDonations = response.data.donations;
+                    const donationBody = document.getElementById('donation-body');
+
+                    // Add new donations to the table
+                    newDonations.forEach(donation => {
+                        if (!document.getElementById('donation-' + donation.id)) {
+                            console.log("Adding new donation:", donation);  // Log when a new donation is added
+                            const row = document.createElement('tr');
+                            row.id = 'donation-' + donation.id;
+                            row.innerHTML = `
+                                <td>${donation.name}</td>
+                                <td>${donation.recipient || 'No recipient'}</td>
+                                <td>$${donation.amount}</td>
+                                <td>${donation.message || 'No message'}</td>
+                                <td><img src="${donation.avatar}" alt="avatar" width="50"></td>
+                                <td>
+                                    <button class="btn btn-success" onclick="handleAction('approve', '${donation.id}')">Approve</button>
+                                    <button class="btn btn-danger" onclick="handleAction('deny', '${donation.id}')">Deny</button>
+                                    ${donation.approved ? `<button class="btn btn-warning" onclick="handleAction('markAsShown', '${donation.id}')">Mark as Shown</button>` : ''}
+                                </td>
+                            `;
+                            donationBody.appendChild(row);
+                        }
+                    });
+                })
+                .catch(error => {
+                    console.error('Error fetching new donations:', error);
+                });
+        }
+
+        // Start polling every 5 seconds
+        setInterval(fetchNewDonations, 5000);
+
+    </script>
 </body>
 </html>
