@@ -8,6 +8,8 @@
     "extra-life-api": "^8.0.0",
     "fs": "^0.0.1-security",
     "node-vmix": "^1.7.1",
+    "socket.io": "^4.8.0",
+    "socket.io-client": "^4.8.0",
     "sqlite3": "^5.1.7",
     "xlsx": "^0.18.5"
   },
@@ -19,6 +21,11 @@
   "author": "David Stevens <issues@jtf4.com>",
   "license": "MIT",
   "scripts": {
-    "start": "electron ."
+    "start": "electron main.js",
+    "package-win": "electron-packager . ExtraLift GFX Connector --platform=win32 --arch=x64  --out=release-builds --overwrite",
+    "package-linux": "electron-packager . ExtraLife GFX Connector --platform=linux --arch=x64  --out=release-builds --overwrite",
+    "package-mac-x64": "electron-packager . ExtraLife GFX Connector --platform=darwin --arch=x64  --out=release-builds --overwrite",
+    "package-mac-arm64": "electron-packager . ExtraLife GFX Connector --platform=darwin --arch=arm64  --out=release-builds --overwrite",
+    "package-mac-universal": "electron-packager . ExtraLife GFX Connector --platform=darwin --arch=x64,arm64  --out=release-builds --overwrite"
   }
 }
