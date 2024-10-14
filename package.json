@@ -2,11 +2,23 @@
   "dependencies": {
     "body-parser": "^1.20.3",
     "ejs": "^3.1.10",
+    "electron": "^32.2.0",
+    "electron-packager": "^17.1.2",
     "express": "^4.21.1",
     "extra-life-api": "^8.0.0",
     "fs": "^0.0.1-security",
     "node-vmix": "^1.7.1",
     "sqlite3": "^5.1.7",
     "xlsx": "^0.18.5"
+  },
+  "name": "extra-life-gfx-connector",
+  "version": "1.0.0",
+  "description": "Allows you to export donations from team to an Excel or CSV file for import to a broadcast graphics system.",
+  "main": "app.js",
+  "repository": "https://github.com/JTF4/extra-life-vmix-connector.git",
+  "author": "David Stevens <issues@jtf4.com>",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron ."
   }
 }

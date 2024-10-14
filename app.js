@@ -1,102 +1,39 @@
 const express = require('express');
-const bodyParser = require('body-parser');
 const fs = require('fs');
 const path = require('path');
+const bodyParser = require('body-parser');
 const extraLifeApi = require('extra-life-api');
-const db = require('./database'); // Import the SQLite database
+const db = require('./database');  // SQLite database
 const XLSX = require('xlsx');
 
 const app = express();
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(express.json());  // Parse JSON bodies
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
 
-const teamId = '67141';
+const teamId = '67141';  // Extra Life Team ID
+const configPath = path.join(__dirname, 'config.json');
+const port = process.env.PORT || 4400;
 
 // Default configuration settings
 const defaultConfig = {
     exportSettings: {
         filePath: './exports',
-        fileName: 'donations',  // Default without extension
-        exportFormat: 'csv'  // Default to CSV
+        fileName: 'donations',
+        exportFormat: 'csv'
     }
 };
 
-// Path to config.json
-const configPath = path.join(__dirname, 'config.json');
-
-// Check if config.json exists, and create it with default settings if it doesn't
+// Ensure config.json exists or create it with default settings
 if (!fs.existsSync(configPath)) {
     console.log('config.json not found, creating with default settings...');
     fs.writeFileSync(configPath, JSON.stringify(defaultConfig, null, 4));
 }
 
-// Load settings from config.json
 let config = JSON.parse(fs.readFileSync(configPath));
 
-// Helper function to add correct extension based on format
-const addFileExtension = (fileName, format) => {
-    const ext = format === 'excel' ? '.xlsx' : '.csv';
-    if (!fileName.endsWith(ext)) {
-        return fileName + ext;
-    }
-    return fileName;
-};
-
-// Fetch donations and save them to the database if not already present
-const fetchDonations = async () => {
-    try {
-        const response = await extraLifeApi.getTeamDonations(teamId);
-        const donations = response.donations;
-        
-        // Log the donations from the API response
-        console.log("Fetched Donations from API:", donations);
-        
-        if (Array.isArray(donations)) {
-            donations.forEach(donation => {
-                db.run(
-                    `INSERT OR IGNORE INTO donations (id, name, recipient, amount, message, avatar) VALUES (?, ?, ?, ?, ?, ?)`,
-                    [
-                        donation.donationID,
-                        donation.displayName,
-                        donation.recipientName || 'No recipient',  // Save the recipient name
-                        donation.amount,
-                        donation.message || '',
-                        donation.avatarImageURL
-                    ],
-                    function(err) {
-                        if (err) {
-                            console.error("Error inserting donation into database:", err.message);
-                        } else {
-                            console.log("Donation inserted or already exists:", donation.donationID);
-                        }
-                    }
-                );
-            });
-        } else {
-            console.log("API response donations field is not an array.");
-        }
-    } catch (error) {
-        console.error('Error fetching donations:', error);
-    }
-};
-
-
-
-// Get unapproved donations that haven't been denied or shown
-const getUnapprovedDonations = async (callback) => {
-    db.all(`SELECT * FROM donations WHERE approved = 0 AND denied = 0 AND shown = 0`, [], (err, rows) => {
-        if (err) {
-            console.error("Error fetching unapproved donations from database:", err.message);
-            callback([]);
-        } else {
-            console.log("Unapproved Donations:", rows);  // Log unapproved donations
-            callback(rows);
-        }
-    });
-};
-
-// Helper function to ensure directory exists
+// Helper to ensure directory exists
 const ensureDirectoryExists = (filePath) => {
     const dir = path.dirname(filePath);
     if (!fs.existsSync(dir)) {
@@ -104,186 +41,99 @@ const ensureDirectoryExists = (filePath) => {
     }
 };
 
+// Helper to add file extension based on format
+const addFileExtension = (fileName, format) => {
+    const ext = format === 'excel' ? '.xlsx' : '.csv';
+    // Use a regular expression to check if the file already has the correct extension
+    if (!fileName.endsWith(ext)) {
+        return fileName.replace(/\.(xlsx|csv)$/, '') + ext;
+    }
+    return fileName;
+};
 
-// Helper function to update CSV file
+// Helper to update CSV file with donation
 const updateCSVFile = (donation) => {
     const filePath = path.join(config.exportSettings.filePath, config.exportSettings.fileName);
-    
     ensureDirectoryExists(filePath);
 
     const csvLine = `${donation.id},${donation.name},${donation.recipient},${donation.amount},${donation.message || 'No message'},${donation.avatar}\n`;
-
     fs.appendFile(filePath, csvLine, (err) => {
-        if (err) {
-            console.error("Error updating CSV file:", err);
-        } else {
-            console.log("CSV file updated with new donation.");
-        }
+        if (err) console.error("Error updating CSV file:", err);
     });
 };
 
-// Helper function to update Excel file
+// Helper function to update Excel file with donation
 const updateExcelFile = (donation) => {
     const filePath = path.join(config.exportSettings.filePath, config.exportSettings.fileName);
 
     ensureDirectoryExists(filePath);
 
-    let wb;
-    if (fs.existsSync(filePath)) {
-        wb = XLSX.readFile(filePath);
+    // Read existing file or create a new workbook
+    let wb = fs.existsSync(filePath) ? XLSX.readFile(filePath) : XLSX.utils.book_new();
+
+    // Check if the sheet 'Donations' already exists
+    let ws;
+    if (wb.SheetNames.includes('Donations')) {
+        ws = wb.Sheets['Donations'];
     } else {
-        wb = XLSX.utils.book_new();
+        ws = XLSX.utils.aoa_to_sheet([['ID', 'Name', 'Recipient', 'Amount', 'Message', 'Avatar']]);
+        XLSX.utils.book_append_sheet(wb, ws, 'Donations');
     }
 
-    const ws = wb.Sheets['Donations'] || XLSX.utils.aoa_to_sheet([['ID', 'Name', 'Recipient', 'Amount', 'Message', 'Avatar']]);
+    // Append new donation data
     XLSX.utils.sheet_add_aoa(ws, [[donation.id, donation.name, donation.recipient, donation.amount, donation.message || 'No message', donation.avatar]], { origin: -1 });
 
-    XLSX.utils.book_append_sheet(wb, ws, 'Donations');
+    // Write the file
     XLSX.writeFile(wb, filePath);
 };
 
-// Approve donation and update the export file
+// Fetch donations from Extra Life API and insert into database
+const fetchDonations = async () => {
+    try {
+        const response = await extraLifeApi.getTeamDonations(teamId);
+        const donations = response.donations || [];
+        donations.forEach(donation => {
+            db.run(
+                `INSERT OR IGNORE INTO donations (id, name, recipient, amount, message, avatar) VALUES (?, ?, ?, ?, ?, ?)`,
+                [donation.donationID, donation.displayName, donation.recipientName || 'No recipient', donation.amount, donation.message || '', donation.avatarImageURL],
+                (err) => {
+                    if (err) console.error("Error inserting donation:", err.message);
+                }
+            );
+        });
+    } catch (error) {
+        console.error('Error fetching donations:', error);
+    }
+};
+
+// Approve donation and update export file
 const approveDonation = (donationId) => {
     db.get(`SELECT * FROM donations WHERE id = ?`, [donationId], (err, donation) => {
-        if (err) {
-            console.error("Error fetching donation:", err.message);
-            return;
-        }
+        if (err) return console.error("Error fetching donation:", err.message);
         db.run(`UPDATE donations SET approved = 1 WHERE id = ?`, [donationId], (err) => {
-            if (err) {
-                console.error("Error approving donation:", err.message);
-            } else {
-                const format = config.exportSettings.exportFormat;
-                if (format === 'csv') {
-                    updateCSVFile(donation);
-                } else if (format === 'excel') {
-                    updateExcelFile(donation);
-                }
-            }
+            if (err) return console.error("Error approving donation:", err.message);
+            const format = config.exportSettings.exportFormat;
+            if (format === 'csv') updateCSVFile(donation);
+            else if (format === 'excel') updateExcelFile(donation);
         });
     });
 };
-
-
-
-
-// Mark donation as shown and trigger vMix
-const markAsShown = (donationId) => {
-    db.get(`SELECT * FROM donations WHERE id = ?`, [donationId], (err, donation) => {
-        if (err) {
-            console.error("Error fetching donation:", err.message);
-            return;
-        }
-        db.run(`UPDATE donations SET shown = 1 WHERE id = ?`, [donationId], function(err) {
-            if (err) {
-                console.error("Error marking donation as shown:", err.message);
-            } else {
-                console.log(`Donation ${donationId} marked as shown.`);
-                // Send to vMix based on whether there's a message or not
-                handleVmixTitle(donation, vmixTitleWithMessage, vmixTitleNoMessage);
-            }
-        });
-    });
-};
-
 
 // Deny donation
 const denyDonation = (donationId) => {
-    db.run(`UPDATE donations SET denied = 1, approved = 0 WHERE id = ?`, [donationId], function(err) {
-        if (err) {
-            console.error("Error denying donation:", err.message);
-        } else {
-            console.log(`Donation ${donationId} denied`);
-        }
+    db.run(`UPDATE donations SET denied = 1, approved = 0 WHERE id = ?`, [donationId], (err) => {
+        if (err) console.error("Error denying donation:", err.message);
     });
 };
 
-// Endpoint to display the donation queue for approval
+// Get unapproved donations
 app.get('/', async (req, res) => {
-    await fetchDonations();  // Fetch donations from the API
-    getUnapprovedDonations((donations) => {
+    await fetchDonations();
+    db.all(`SELECT * FROM donations WHERE approved = 0 AND denied = 0 AND shown = 0`, [], (err, donations) => {
+        if (err) return console.error("Error fetching unapproved donations:", err.message);
         res.render('index', { donations });
     });
 });
-
-// Add middleware to parse JSON body
-app.use(express.json());
-
-// Handle approval of donations
-app.post('/approve', (req, res) => {
-    const donationId = req.body.donationId;  // Extract the donationId from the request body
-    if (!donationId) {
-        return res.status(400).json({ success: false, message: "Donation ID is required" });
-    }
-    approveDonation(donationId);
-    res.json({ success: true });
-});
-
-// Handle denial of donations
-app.post('/deny', (req, res) => {
-    const donationId = req.body.donationId;  // Extract the donationId from the request body
-    if (!donationId) {
-        return res.status(400).json({ success: false, message: "Donation ID is required" });
-    }
-    denyDonation(donationId);
-    res.json({ success: true });
-});
-
-// Mark donation as shown
-app.post('/markAsShown', (req, res) => {
-    const donationId = req.body.donationId;  // Extract the donationId from the request body
-    if (!donationId) {
-        return res.status(400).json({ success: false, message: "Donation ID is required" });
-    }
-    markAsShown(donationId);
-    res.json({ success: true });
-});
-
-let exportSettings = {
-    filePath: './exports',  // Default file path
-    fileName: 'donations.csv'      // Default file name
-};
-
-// Route to render settings page
-app.get('/settings', (req, res) => {
-    res.render('settings', {
-        title: 'Export Settings',
-        exportSettings: config.exportSettings
-    });
-});
-
-// Route to handle settings form submission
-app.post('/settings', (req, res) => {
-    const { exportFilePath, exportFileName, exportFormat } = req.body;
-
-    // Add correct extension to the file name
-    const fileNameWithExt = addFileExtension(exportFileName, exportFormat);
-
-    // Update config settings
-    config.exportSettings.filePath = exportFilePath;
-    config.exportSettings.fileName = fileNameWithExt;
-    config.exportSettings.exportFormat = exportFormat;
-
-    // Save updated settings to config.json
-    fs.writeFileSync(configPath, JSON.stringify(config, null, 4));
-
-    res.redirect('/settings');
-});
-
-
-
-// Route to get unapproved donations in JSON format for dynamic updates
-app.get('/api/getNewDonations', (req, res) => {
-    db.all(`SELECT * FROM donations WHERE approved = 0 AND denied = 0 AND shown = 0`, [], (err, rows) => {
-        if (err) {
-            console.error("Error fetching new donations:", err.message);
-            res.status(500).json({ success: false, error: err.message });
-        } else {
-            res.json({ success: true, donations: rows });
-        }
-    });
-});
-
 
 // Route to render the test control page
 app.get('/test', (req, res) => {
@@ -297,12 +147,12 @@ app.post('/test/insertDonation', (req, res) => {
     db.run(
         `INSERT OR IGNORE INTO donations (id, name, recipient, amount, message, avatar) VALUES (?, ?, ?, ?, ?, ?)`,
         [
-            donationID || `TEST${Math.floor(Math.random() * 10000)}`, // Unique ID for each test
+            donationID || `TEST${Math.floor(Math.random() * 10000)}`,  // Generate unique ID for test donations
             displayName || 'Test Donor',
             recipientName || 'Test Recipient',
             amount || 50,
             message || 'This is a test donation.',
-            avatarImageURL || 'https://placekitten.com/50/50'
+            avatarImageURL || 'https://placekitten.com/50/50'  // Default avatar for test
         ],
         function(err) {
             if (err) {
@@ -318,7 +168,7 @@ app.post('/test/insertDonation', (req, res) => {
 
 // Cleanup route to remove all test donations
 app.post('/test/cleanup', (req, res) => {
-    db.run(`DELETE FROM donations WHERE id LIKE 'TEST%' OR id LIKE 'MOCK%'`, function(err) {
+    db.run(`DELETE FROM donations WHERE id LIKE 'TEST%'`, function(err) {
         if (err) {
             console.error("Error cleaning up test donations:", err.message);
             res.status(500).json({ success: false, error: err.message });
@@ -329,8 +179,38 @@ app.post('/test/cleanup', (req, res) => {
     });
 });
 
-
-// Start the server on port 4400
-app.listen(4400, () => {
-    console.log('Server running on http://localhost:4400');
+// Render settings page
+app.get('/settings', (req, res) => {
+    res.render('settings', { title: 'Export Settings', exportSettings: config.exportSettings });
 });
+
+// Handle settings form submission
+app.post('/settings', (req, res) => {
+    const { exportFilePath, exportFileName, exportFormat } = req.body;
+    config.exportSettings.filePath = exportFilePath;
+    config.exportSettings.fileName = addFileExtension(exportFileName, exportFormat);
+    config.exportSettings.exportFormat = exportFormat;
+    fs.writeFileSync(configPath, JSON.stringify(config, null, 4));
+    res.redirect('/settings');
+});
+
+// Approve donation via POST
+app.post('/approve', (req, res) => {
+    const donationId = req.body.donationId;
+    if (!donationId) return res.status(400).json({ success: false, message: "Donation ID is required" });
+    approveDonation(donationId);
+    res.json({ success: true });
+});
+
+// Deny donation via POST
+app.post('/deny', (req, res) => {
+    const donationId = req.body.donationId;
+    if (!donationId) return res.status(400).json({ success: false, message: "Donation ID is required" });
+    denyDonation(donationId);
+    res.json({ success: true });
+});
+
+app.listen(port, () => {
+    console.log(`Server running at http://localhost:${port}`);
+});
+
