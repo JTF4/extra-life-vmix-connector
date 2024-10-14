@@ -29,6 +29,7 @@
     
     <div class="container">
         <h1 class="my-4">Settings</h1>
+
         <form action="/settings" method="POST">
             <!-- Team ID Input -->
             <div class="mb-3">
@@ -64,7 +65,8 @@
         <h2 class="my-4">Manage Files</h2>
         <div class="d-flex">
             <button class="btn btn-danger me-3" onclick="confirmClearDatabase()">Clear All Donations</button>
-            <button class="btn btn-secondary" onclick="openExportFile()">Open Exported File</button>
+            <button class="btn btn-secondary me-3" onclick="openExportFile()">Open Exported File</button>
+            <button class="btn btn-info" onclick="openExportDirectory()">Open Export Directory</button>
         </div>
     </div>
 
@@ -94,6 +96,17 @@
                 })
                 .catch(error => {
                     alert('Error opening the export file: ' + error.message);
+                });
+        }
+
+        // Function to open the directory where the exported file is stored
+        function openExportDirectory() {
+            axios.post('/open-export-directory')
+                .then(response => {
+                    alert('Export directory opened successfully!');
+                })
+                .catch(error => {
+                    alert('Error opening the export directory: ' + error.message);
                 });
         }
     </script>

@@ -130,7 +130,7 @@ dist
 .pnp.*
 
 #other
-release-builds/*
-exports/*
-donations.db 
-config.json 
+release-builds/
+exports/
+donations.db
+config.json

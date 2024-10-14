@@ -2,8 +2,6 @@
   "dependencies": {
     "body-parser": "^1.20.3",
     "ejs": "^3.1.10",
-    "electron": "^32.2.0",
-    "electron-packager": "^17.1.2",
     "express": "^4.21.1",
     "extra-life-api": "^8.0.0",
     "fs": "^0.0.1-security",
@@ -20,12 +18,60 @@
   "repository": "https://github.com/JTF4/extra-life-vmix-connector.git",
   "author": "David Stevens <issues@jtf4.com>",
   "license": "MIT",
+  "build": {
+    "appId": "com.yourcompany.yourapp",
+    "productName": "MyApp",
+    "directories": {
+      "output": "release-builds"
+    },
+    "files": [
+      "app.js",
+      "views/**/*",
+      "node_modules/**/*",
+      "package.json"
+    ],
+    "mac": {
+      "icon": "icons/icon.icns",
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "category": "public.app-category.utilities"
+    },
+    "win": {
+      "icon": "icons/icon.ico",
+      "target": [
+        "nsis",
+        "zip"
+      ]
+    },
+    "linux": {
+      "icon": "icons/icon.png",
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    },
+    "dmg": {
+      "icon": "icons/icon.icns"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
   "scripts": {
     "start": "electron main.js",
-    "package-win": "electron-packager . ExtraLift GFX Connector --platform=win32 --arch=x64  --out=release-builds --overwrite",
-    "package-linux": "electron-packager . ExtraLife GFX Connector --platform=linux --arch=x64  --out=release-builds --overwrite",
-    "package-mac-x64": "electron-packager . ExtraLife GFX Connector --platform=darwin --arch=x64  --out=release-builds --overwrite",
-    "package-mac-arm64": "electron-packager . ExtraLife GFX Connector --platform=darwin --arch=arm64  --out=release-builds --overwrite",
-    "package-mac-universal": "electron-packager . ExtraLife GFX Connector --platform=darwin --arch=x64,arm64  --out=release-builds --overwrite"
+    "package-all": "electron-builder --mac --win --linux",
+    "package-mac": "electron-builder --mac --x64 --arm64",
+    "package-mac-universal": "electron-builder --mac universal",
+    "package-win": "electron-builder --win",
+    "package-linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^32.2.0",
+    "electron-builder": "^25.1.8",
+    "electron-rebuild": "^3.2.9"
   }
 }
