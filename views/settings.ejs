@@ -37,10 +37,22 @@
                 <input type="text" class="form-control" id="teamId" name="teamId" value="<%= teamId %>">
             </div>
 
-            <!-- Export File Path -->
+            <!-- Export Folder (choose via system dialog) -->
             <div class="mb-3">
-                <label for="exportFilePath" class="form-label">Export File Path</label>
-                <input type="text" class="form-control" id="exportFilePath" name="exportFilePath" value="<%= exportSettings.filePath %>">
+                <label for="exportFilePathDisplay" class="form-label">Export Folder</label>
+                <div class="input-group">
+                    <input
+                        type="text"
+                        class="form-control"
+                        id="exportFilePathDisplay"
+                        value="<%= exportSettings ? exportSettings.filePath : '' %>"
+                        placeholder="Choose a folder…"
+                        readonly>
+                    <button type="button" class="btn btn-outline-secondary" onclick="browseForFolder()">Browse…</button>
+                </div>
+                <!-- Hidden input actually submitted with the form -->
+                <input type="hidden" id="exportFilePath" name="exportFilePath" value="<%= exportSettings ? exportSettings.filePath : '' %>">
+                <div class="form-text">Select the directory where CSV/Excel exports will be written.</div>
             </div>
 
             <!-- Export File Name -->
@@ -109,6 +121,25 @@
                     alert('Error opening the export directory: ' + error.message);
                 });
         }
+
+        async function browseForFolder() {
+            // Prefer Electron preload API if available
+            if (window.electronAPI && typeof window.electronAPI.selectDirectory === 'function') {
+                try {
+                    const selectedPath = await window.electronAPI.selectDirectory();
+                    if (selectedPath) {
+                        document.getElementById('exportFilePathDisplay').value = selectedPath;
+                        document.getElementById('exportFilePath').value = selectedPath;
+                    }
+                } catch (err) {
+                    alert('Error selecting folder: ' + (err && err.message ? err.message : err));
+                }
+                return;
+            }
+
+            // Fallback when not running in the desktop app
+            alert('Folder picker requires the desktop app. Please enter the path manually or run this in the Electron build with a folder dialog.');
+  }
     </script>
 </body>
 </html>

@@ -1,50 +1,79 @@
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 const path = require('path');
-const http = require('http');
-const expressApp = require('./app');  // Import your Express app (we will pass userDataPath here)
+const expressApp = require('./app');  // Import the configured Express app
 
 let mainWindow;
-let server;
-const port = process.env.PORT || 4400;
+let serverPort;
 
 function createWindow() {
     mainWindow = new BrowserWindow({
-        width: 1024,
-        height: 768,
+        width: 1200,
+        height: 800,
         webPreferences: {
-            nodeIntegration: true,
-            contextIsolation: false
+            preload: path.join(__dirname, 'preload.js'),
+            contextIsolation: true,
+            nodeIntegration: false,
+            sandbox: true
         }
     });
 
-    mainWindow.loadURL(`http://localhost:${port}`);
+    mainWindow.loadURL(`http://localhost:${serverPort}/`);
     mainWindow.on('closed', () => {
         mainWindow = null;
     });
 }
 
-app.whenReady().then(() => {
-    const userDataPath = app.getPath('userData');  // Get userData path here
-
-    // Pass the userDataPath to the Express app by passing it to the server creation
-    expressApp.init({ userDataPath });
-
-    server = http.createServer(expressApp);
-
-    server.listen(port, () => {
-        console.log(`Server running at http://localhost:${port}`);
-        createWindow();
-    });
-
-    app.on('activate', () => {
-        if (BrowserWindow.getAllWindows().length === 0) {
-            createWindow();
+const singleInstanceLock = app.requestSingleInstanceLock();
+if (!singleInstanceLock) {
+    app.quit();
+} else {
+    app.on('second-instance', () => {
+        if (mainWindow) {
+            if (mainWindow.isMinimized()) {
+                mainWindow.restore();
+            }
+            mainWindow.focus();
         }
     });
+}
+
+app.whenReady().then(async () => {
+    try {
+        const userDataPath = app.getPath('userData');
+        serverPort = process.env.PORT || 4400;
+
+        serverPort = await expressApp.init({ userDataPath, port: serverPort });
+
+        ipcMain.handle('select-directory', async () => {
+            const result = await dialog.showOpenDialog({
+                properties: ['openDirectory', 'createDirectory']
+            });
+            if (result.canceled || !result.filePaths.length) return null;
+            return result.filePaths[0];
+        });
+
+        createWindow();
+
+        app.on('activate', () => {
+            if (BrowserWindow.getAllWindows().length === 0) {
+                createWindow();
+            }
+        });
+    } catch (error) {
+        console.error('Failed to initialise application:', error);
+        app.quit();
+    }
 });
 
 app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
         app.quit();
+    }
+});
+
+app.on('before-quit', () => {
+    const server = expressApp.getServer && expressApp.getServer();
+    if (server && server.listening) {
+        server.close();
     }
 });

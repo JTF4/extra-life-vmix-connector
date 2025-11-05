@@ -8,11 +8,11 @@ const XLSX = require('xlsx');
 const http = require('http');
 const socketIo = require('socket.io');
 const { exec } = require('child_process');
-const { app: electronApp, shell } = require('electron'); // Make sure Electron app is properly required
+const { shell } = require('electron');
 
 const expressApp = express();
-const server = http.createServer(expressApp);
-const io = socketIo(server);
+let server;
+let io;
 
 // Middleware and settings
 expressApp.use(bodyParser.urlencoded({ extended: true }));
@@ -23,15 +23,23 @@ expressApp.set('views', path.join(__dirname, 'views'));
 // Declare variables
 let config = {};
 let db;
-const teamId = '67141';  // Default Extra Life Team ID
+const teamId = '00000';  // Default Extra Life Team ID
 let dbPath, configPath;
 
+let userDataPath;
+let currentPort;
+let isInitialized = false;
 
+const init = async ({ userDataPath: providedUserDataPath, port: providedPort } = {}) => {
+    if (isInitialized) {
+        return currentPort;
+    }
 
-// Wait for the Electron app to be ready before proceeding
-electronApp.whenReady().then(() => {
-    // Get the userData directory from Electron
-    userDataPath = electronApp.getPath('userData');
+    if (!providedUserDataPath) {
+        throw new Error('userDataPath is required to initialize the application.');
+    }
+
+    userDataPath = providedUserDataPath;
     configPath = path.join(userDataPath, 'config.json');
     dbPath = path.join(userDataPath, 'database.db');
 
@@ -53,18 +61,43 @@ electronApp.whenReady().then(() => {
 
     // Load settings from config.json
     config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    console.log(config)
 
     // Initialize the SQLite database
     initializeDatabase();
 
-    // Start the server
-    const port = process.env.PORT || 4400;
-    server.listen(port, () => {
-        console.log(`Server running at http://localhost:${port}`);
-    });
-}).catch(err => {
-    console.error('Failed to initialize the app:', err);
-});
+    server = http.createServer(expressApp);
+    io = socketIo(server);
+
+    const port = providedPort || process.env.PORT || 4400;
+
+    try {
+        await new Promise((resolve, reject) => {
+            const onError = (err) => {
+                server.removeListener('error', onError);
+                reject(err);
+            };
+
+            server.once('error', onError);
+            server.listen(port, () => {
+                server.removeListener('error', onError);
+                console.log(`Server running at http://localhost:${port}`);
+                resolve();
+            });
+        });
+    } catch (error) {
+        if (server && server.listening) {
+            server.close();
+        }
+        server = null;
+        io = null;
+        throw error;
+    }
+
+    currentPort = port;
+    isInitialized = true;
+    return currentPort;
+};
 
 // Initialize the SQLite database
 function initializeDatabase() {
@@ -121,7 +154,7 @@ const updateCSVFile = (donation) => {
     ensureDirectoryExists(directory);
 
     // Use the user data path for storing exports
-    const filePath = path.join(userDataPath, directory, fileName);
+    const filePath = path.join(config.exportSettings.filePath, fileName);
 
     // Prepare CSV line for donation
     const csvLine = `${donation.id},${donation.name},${donation.recipient},${donation.amount},${donation.message || 'No message'},${donation.avatar}\n`;
@@ -145,7 +178,7 @@ const updateExcelFile = (donation) => {
     ensureDirectoryExists(directory);
 
     // Use the user data path for storing exports
-    const filePath = path.join(userDataPath, directory, fileName);
+    const filePath = path.join(config.exportSettings.filePath, fileName);
 
     // Read existing workbook or create a new one
     let wb;
@@ -156,16 +189,31 @@ const updateExcelFile = (donation) => {
     }
 
     // Check if the sheet 'Donations' exists or create a new one
-    let ws = wb.Sheets['Donations'] || XLSX.utils.aoa_to_sheet([['ID', 'Name', 'Recipient', 'Amount', 'Message', 'Avatar']]);
+    let ws = wb.Sheets['Donations'] 
 
-    // Add new donation to the sheet
-    XLSX.utils.sheet_add_aoa(ws, [[donation.id, donation.name, donation.recipient, donation.amount, donation.message || 'No message', donation.avatar]], { origin: -1 });
+    // Check to see if the file exists and if not, make the file. 
+    if(!ws) {
+        console.log('doing the thing')
+        XLSX.utils.aoa_to_sheet([['ID', 'Name', 'Recipient', 'Amount', 'Message', 'Avatar']]);
+        XLSX.utils.book_append_sheet(wb, ws, 'Donations');
+        
+        console.log(ws)
 
-    // Append sheet to the workbook if it's new
-    XLSX.utils.book_append_sheet(wb, ws, 'Donations');
+        // Add new donation to the sheet
+        XLSX.utils.sheet_add_aoa(ws, [[donation.id, donation.name, donation.recipient, donation.amount, donation.message || 'No message', donation.avatar]], { origin: -1 })
+        // Write the updated workbook to file
+        XLSX.writeFile(wb, filePath);
 
-    // Write the updated workbook to file
-    XLSX.writeFile(wb, filePath);
+    } else {
+
+        // Add new donation to the sheet
+        XLSX.utils.sheet_add_aoa(ws, [[donation.id, donation.name, donation.recipient, donation.amount, donation.message || 'No message', donation.avatar]], { origin: -1 });
+
+        // Write the updated workbook to file
+        XLSX.writeFile(wb, filePath);
+
+    }
+   
 };
 
 // Emit new donations via WebSocket when they are fetched or inserted
@@ -296,7 +344,7 @@ expressApp.post('/test/insertDonation', (req, res) => {
         recipient: recipientName || 'Test Recipient',
         amount: amount || 50,
         message: message || 'This is a test donation.',
-        avatar: avatarImageURL || 'https://via.placeholder.com/50'
+        avatar: avatarImageURL || 'https://i.imgur.com/V4RclNb.png'
     };
     db.run(`INSERT OR IGNORE INTO donations (id, name, recipient, amount, message, avatar) VALUES (?, ?, ?, ?, ?, ?)`, [newDonation.id, newDonation.name, newDonation.recipient, newDonation.amount, newDonation.message, newDonation.avatar], function(err) {
         if (err) {
@@ -367,7 +415,6 @@ expressApp.get('/api/getNewDonations', (req, res) => {
 });
 
 module.exports = expressApp;
-// Initialize the Express app and pass in userDataPath
-module.exports.init = (config) => {
-    userDataPath = config.userDataPath;  // Set userDataPath from main.js
-};
+module.exports.init = init;
+module.exports.getServer = () => server;
+module.exports.getPort = () => currentPort;
